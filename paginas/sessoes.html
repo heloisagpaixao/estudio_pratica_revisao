@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="pt-br">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Estúdio Tattoo - Sessões</title>
+  </head>
+  <body>
+    <h1>Sessões</h1>
+    <p><a href="/principal"> Voltar </a></p>
+
+    <table border="1">
+      <tr>
+        <th>Data da Sessão</th>
+        <th>Tipo de Serviço</th>
+        <th>Projeto de Tatuagem</th>
+        <th>Cliente</th>
+        <th>Alterar Data</th>
+      </tr>
+      {{#sessoes}}
+      <tr>
+        <td>{{data_br}}</td>
+        <td>{{tipo_de_servico}}</td>
+        <td>{{modelo}}</td>
+        <td>{{cliente_nome}}</td>
+        <td>
+          <form method="POST" action="/sessoes/{{id}}">
+            <input type="hidden" name="_method" value="PUT" />
+
+            <input
+              type="datetime-local"
+              name="data_sessao"
+              value="{{data_input}}"
+              required
+            />
+
+            <button>Salvar</button>
+          </form>
+
+          <form method="POST" action="/sessoes/{{id}}">
+            <input type="hidden" name="_method" value="DELETE" />
+
+            <button>Excluir</button>
+          </form>
+        </td>
+      </tr>
+      {{/sessoes}}
+    </table>
+
+    <h2>Cadastrar sessão</h2>
+    <form method="POST" action="/sessoes">
+      <select name="projeto_id" required>
+        <option value="">Selecione o projeto...</option>
+        {{#projetos}}
+        <option value="{{id}}">{{modelo}} {{tamanho}} - {{cor}}</option>
+        {{/projetos}}
+      </select>
+
+      <input type="datetime-local" name="data_sessao" required />
+      <input
+        type="text"
+        name="tipo_de_servico"
+        placeholder="Serviço que será efetuado"
+      />
+
+      <button>Cadastrar</button>
+    </form>
+    <p>{{erro}}</p>
+  </body>
+</html>

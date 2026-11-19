@@ -30,7 +30,6 @@ const db = mysql.createPool({
 });
 
 // =================================== FUNÇÕES INICIAIS =================================== //
-
 function mostrar(nome, dados = {}) {
   const arquivo = path.join(__dirname, "paginas", `${nome}.html`);
   return Mustache.render(fs.readFileSync(arquivo, "utf-8"), dados);
@@ -136,6 +135,141 @@ app.use((req, res, next) => {
 app.get("/principal", (req, res) =>
   res.send(mostrar("principal", { nome: req.usuario.nome })),
 );
+
+// =================================== CLIENTES =================================== //
+app.get("/clientes", async (req, res) => {
+  const busca = req.query.busca || "";
+  const [lista] = await db.query("SELECT * FROM clientes WHERE nome LIKE ?", [
+    `%${busca}%`,
+  ]);
+  const clientes = lista.map((cliente) => ({
+    ...cliente,
+    cpf: descriptografar(cliente.cpf),
+  }));
+
+  const editar = clientes.find(
+    (cliente) => String(cliente.id) === req.query.editar,
+  );
+
+  res.send(
+    mostrar("clientes", {
+      busca,
+      clientes,
+      editando: Boolean(editar),
+      acao: editar ? `/clientes/${editar.id}` : "/clientes",
+      form: editar || {},
+    }),
+  );
+});
+
+app.post("/clientes", async (req, res) => {
+  const { nome, cpf, telefone, email } = req.body;
+  await db.query(
+    "INSERT INTO clientes (nome, cpf, telefone, email) VALUES (?, ?, ?, ?)",
+    [nome, criptografar(cpf), telefone, email],
+  );
+  res.redirect("/clientes");
+});
+
+app.put("/clientes/:id", async (req, res) => {
+  const { nome, cpf, telefone, email } = req.body;
+  await db.query(
+    "UPDATE clientes SET nome = ?, cpf = ?, telefone = ?, email = ? WHERE id = ?",
+    [nome, criptografar(cpf), telefone, email, req.params.id],
+  );
+  res.redirect("/clientes");
+});
+
+app.delete("/clientes/:id", async (req, res) => {
+  await excluir(
+    res,
+    "clientes",
+    req.params.id,
+    "/clientes",
+    "O cliente já possuí projetos cadastrados.",
+  );
+});
+
+// =================================== PROJETOS DE TATUAGEM =================================== //
+app.get("/projetos", (req, res) => mostrarProjetos(req, res));
+
+app.post("/projetos", async (req, res) => {
+  const { cliente_id, modelo, cor, tamanho, lugar_do_corpo } = req.body;
+  if (!cliente_id) {
+    return mostrarProjetos(req, res, "Cliente ID é obrigatório.");
+  }
+  await db.query(
+    "INSERT INTO projetos_de_tatuagem (cliente_id, modelo, cor, tamanho, lugar_do_corpo) VALUES (?, ?, ?, ?, ?)",
+    [cliente_id, modelo, cor, tamanho, lugar_do_corpo || null],
+  );
+  res.redirect("/projetos");
+});
+
+app.put("/projetos/:id", async (req, res) => {
+  const { cliente_id, modelo, cor, tamanho, lugar_do_corpo } = req.body;
+
+  if (!cliente_id)
+    return mostrarProjetos(req, res, "ID do cliente é obrigatório.");
+
+  await db.query(
+    "UPDATE projetos_de_tatuagem SET cliente_id = ?, modelo = ?, cor = ?, tamanho = ?, lugar_do_corpo = ? WHERE id = ?",
+    [cliente_id, modelo, cor, tamanho, lugar_do_corpo || null, req.params.id],
+  );
+  res.redirect("/projetos");
+});
+
+app.delete("/projetos/:id", async (req, res) => {
+  await excluir(
+    res,
+    "projetos_de_tatuagem",
+    req.params.id,
+    "/projetos",
+    "O projeto possui sessões.",
+  );
+});
+
+// =================================== SESSÕES =================================== //
+app.get("/sessoes", async (req, res) => {
+  const [lista] = await db.query(
+    `SELECT sessoes.*, projetos_de_tatuagem.modelo, clientes.nome AS cliente_nome
+     FROM sessoes
+     JOIN projetos_de_tatuagem ON projetos_de_tatuagem.id = sessoes.projeto_id
+     JOIN clientes ON clientes.id = projetos_de_tatuagem.cliente_id
+     ORDER BY sessoes.data_sessao`,
+  );
+
+  const [projetos] = await db.query("SELECT * FROM projetos_de_tatuagem");
+
+  const sessoes = lista.map((s) => ({
+    ...s,
+    data_br: new Date(s.data_sessao).toLocaleString("pt-BR"),
+    data_input: s.data_sessao.slice(0, 16).replace(" ", "T"),
+  }));
+
+  res.send(mostrar("sessoes", { sessoes, projetos }));
+});
+
+app.post("/sessoes", async (req, res) => {
+  const { projeto_id, data_sessao, tipo_de_servico } = req.body;
+
+  await db.query(
+    "INSERT INTO sessoes (projeto_id, data_sessao, tipo_de_servico) VALUES (?, ?, ?)",
+    [projeto_id, data_sessao.replace("T", " "), tipo_de_servico],
+  );
+  res.redirect("/sessoes");
+});
+
+app.put("/sessoes/:id", async (req, res) => {
+  await db.query("UPDATE sessoes SET data_sessao = ? WHERE id = ?", [
+    req.body.data_sessao.replace("T", " "),
+    req.params.id,
+  ]);
+  res.redirect("/sessoes");
+});
+
+app.delete("/sessoes/:id", async (req, res) => {
+  await excluir(res, "sessoes", req.params.id, "/sessoes", " ");
+});
 
 // =================================== BANCO DE DADOS =================================== //
 const porta = process.env.PORT || 3000;
